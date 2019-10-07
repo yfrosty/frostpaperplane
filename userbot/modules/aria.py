@@ -83,6 +83,8 @@ async def magnet_download(event):
     gid = download.gid
     file = aria2.get_download(gid)
     await event.edit("`Fetching metadata from magnet link, please wait.`")
+    while not file.followed_by_ids:
+        await asyncio.sleep(1)
     final_gid = file.followed_by_ids[0]
     LOGS.info("Changing GID " + gid + " to " + final_gid)
     await check_progress_for_dl(final_gid, event)
