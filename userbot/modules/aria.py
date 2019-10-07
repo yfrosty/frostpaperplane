@@ -77,7 +77,6 @@ async def magnet_download(event):
     try:
         download = aria2.add_magnet(magnet_uri)
     except Exception as e:
-        LOGS.info(str(e))
         await event.edit("Error:\n`" + str(e) + "`")
         return
     gid = download.gid
@@ -105,8 +104,7 @@ async def torrent_download(event):
                                      options=None,
                                      position=None)
     except Exception as e:
-        LOGS.info(str(e))
-        await event.edit("Error:\n`" + str(e) + "`")
+        await event.edit("Error :\n`{}`".format(str(e)))
         return
     gid = download.gid
     await check_progress_for_dl(gid, event)
@@ -118,7 +116,6 @@ async def magnet_download(event):
     try:  # Add URL Into Queue
         download = aria2.add_uris(uri, options=None, position=None)
     except Exception as e:
-        LOGS.info(str(e))
         await event.edit("Error :\n`{}`".format(str(e)))
         return
     gid = download.gid
@@ -158,7 +155,7 @@ async def show_all(event):
     if not aria2:
         await event.edit(
             "`No ongoing downloads, coz local aria2 server is not running.`\
-        \n`Spin up a new instance of the aria2 server using .startaria`")
+        \n`Spin up a new instance of the aria2 server using .aria_start`")
         return
     downloads = aria2.get_downloads()
     msg = ""
@@ -192,7 +189,7 @@ async def check_progress_for_dl(gid, event):
         file = aria2.get_download(gid)
         try:
             if not file.error_message:
-                percentage = file.progress()
+                percentage = file.progress
                 progress_str = "[{0}{1}] {2}%\n".format(
                     ''.join(["▰" for i in range(math.floor(percentage / 10))]),
                     ''.join([
