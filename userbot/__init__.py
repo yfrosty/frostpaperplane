@@ -111,8 +111,8 @@ LASTFM_API = os.environ.get("LASTFM_API", None)
 LASTFM_SECRET = os.environ.get("LASTFM_SECRET", None)
 LASTFM_USERNAME = os.environ.get("LASTFM_USERNAME", None)
 LASTFM_PASSWORD_PLAIN = os.environ.get("LASTFM_PASSWORD", None)
-LASTFM_PASS = md5(LASTFM_PASSWORD_PLAIN)
-if LASTFM_API and LASTFM_SECRET and LASTFM_USERNAME and LASTFM_PASS:
+if LASTFM_API and LASTFM_SECRET and LASTFM_USERNAME and LASTFM_PASSWORD_PLAIN:
+    LASTFM_PASS = md5(LASTFM_PASSWORD_PLAIN)
     lastfm = LastFMNetwork(api_key=LASTFM_API,
                            api_secret=LASTFM_SECRET,
                            username=LASTFM_USERNAME,
@@ -120,11 +120,13 @@ if LASTFM_API and LASTFM_SECRET and LASTFM_USERNAME and LASTFM_PASS:
 else:
     lastfm = None
 
-# Google Drive Module
+# Google Drive Module configuration.
 G_DRIVE_CLIENT_ID = os.environ.get("G_DRIVE_CLIENT_ID", None)
 G_DRIVE_CLIENT_SECRET = os.environ.get("G_DRIVE_CLIENT_SECRET", None)
 G_DRIVE_AUTH_TOKEN_DATA = os.environ.get("G_DRIVE_AUTH_TOKEN_DATA", None)
 GDRIVE_FOLDER_ID = os.environ.get("GDRIVE_FOLDER_ID", None)
+
+# Directory to save downloaded stuff, for many modules.
 TEMP_DOWNLOAD_DIRECTORY = os.environ.get("TMP_DOWNLOAD_DIRECTORY",
                                          "./downloads")
 

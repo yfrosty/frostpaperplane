@@ -4,42 +4,70 @@
 # you may not use this file except in compliance with the License.
 
 import aria2p
-from asyncio import sleep
+import asyncio
+import math
 from os import system
-from userbot import LOGS, CMD_HELP
+import io
+from userbot import LOGS, CMD_HELP, TEMP_DOWNLOAD_DIRECTORY
 from userbot.events import register
 from requests import get
 
-# Get best trackers for improved download speeds, thanks K-E-N-W-A-Y.
-trackers_list = get(
-    'https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt'
-).text.replace('\n\n', ',')
-trackers = f"[{trackers_list}]"
-
-cmd = f"aria2c \
---enable-rpc \
---rpc-listen-all=false \
---rpc-listen-port 6800 \
---max-connection-per-server=10 \
---rpc-max-request-size=1024M \
---seed-time=0.01 \
---max-upload-limit=5K \
---max-concurrent-downloads=5 \
---min-split-size=10M \
---follow-torrent=mem \
---split=10 \
---bt-tracker={trackers} \
---daemon=true \
---allow-overwrite=true"
-
-aria2_is_running = system(cmd)
-
-aria2 = aria2p.API(aria2p.Client(host="http://localhost", port=6800,
-                                 secret=""))
+aria2 = None
 
 
-@register(outgoing=True, pattern="^.amag(?: |$)(.*)")
+@register(outgoing=True, pattern="^.aria_start$")
+async def aria_kickstart():
+    # Get best trackers for improved download speeds, thanks K-E-N-W-A-Y.
+    LOGS.info("Fetching trackers for local aria2 server....")
+    trackers_list = get(
+        'https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all.txt'
+    ).text.replace('\n\n', ',')
+    trackers = f"[{trackers_list}]"
+    LOGS.info(f"Current trackers list: {trackers}")
+
+    # Command for starting aria2 local server.
+    aria_start_cmd = f"aria2c \
+    --enable-rpc=true \
+    --rpc-listen-all=false \
+    --rpc-listen-port 6800 \
+    --max-connection-per-server=10 \
+    --rpc-max-request-size=1024M \
+    --seed-ratio=100.0 \
+    --seed-time=1 \
+    --max-upload-limit=5K \
+    --max-concurrent-downloads=5 \
+    --min-split-size=10M \
+    --follow-torrent=mem \
+    --split=10 \
+    --bt-tracker={trackers} \
+    --dir='{TEMP_DOWNLOAD_DIRECTORY}' \
+    --allow-overwrite=true"
+
+    try:
+        process = await asyncio.create_subprocess_exec(
+            aria_start_cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE)
+        stdout, stderr = await process.communicate()
+        LOGS.info(stdout)
+        LOGS.info(stderr)
+    except FileNotFoundError:
+        await event.edit("`Install aria2c first, KThxBye.`")
+        return
+    global aria2
+    aria2 = aria2p.API(
+        aria2p.Client(host="http://localhost", port=6800, secret=""))
+    await event.edit(f"`Local aria2 server online !!`\
+    \nPID: {process.pid}")
+
+
+@register(outgoing=True, pattern="^.magnet(?: |$)(.*)")
 async def magnet_download(event):
+    if not aria2:
+        await event.edit(
+            "`Local aria2 server is offline, use .aria_start to kick start the service.`"
+        )
+        return
     magnet_uri = event.pattern_match.group(1)
     # Add Magnet URI Into Queue
     try:
@@ -49,14 +77,20 @@ async def magnet_download(event):
         await event.edit("Error:\n`" + str(e) + "`")
         return
     gid = download.gid
-    await check_progress_for_dl(gid=gid, event=event, previous=None)
-    await sleep(5)
-    new_gid = await check_metadata(gid)
-    await check_progress_for_dl(gid=new_gid, event=event, previous=None)
+    file = aria2.get_download(gid)
+    await event.edit("`Fetching metadata from magnet link, please wait.`")
+    final_gid = file.followed_by_ids[0]
+    LOGS.info("Changing GID " + gid + " to " + final_gid)
+    await check_progress_for_dl(final_gid, event)
 
 
-@register(outgoing=True, pattern="^.ator(?: |$)(.*)")
+@register(outgoing=True, pattern="^.torrent(?: |$)(.*)")
 async def torrent_download(event):
+    if not aria2:
+        await event.edit(
+            "`Local aria2 server is offline, use .aria_start to kick start the service.`"
+        )
+        return
     torrent_file_path = event.pattern_match.group(1)
     # Add Torrent Into Queue
     try:
@@ -65,13 +99,14 @@ async def torrent_download(event):
                                      options=None,
                                      position=None)
     except Exception as e:
-        await event.edit(str(e))
+        LOGS.info(str(e))
+        await event.edit("Error:\n`" + str(e) + "`")
         return
     gid = download.gid
-    await check_progress_for_dl(gid=gid, event=event, previous=None)
+    await check_progress_for_dl(gid, event)
 
 
-@register(outgoing=True, pattern="^.aurl(?: |$)(.*)")
+@register(outgoing=True, pattern="^.aria_dl(?: |$)(.*)")
 async def magnet_download(event):
     uri = [event.pattern_match.group(1)]
     try:  # Add URL Into Queue
@@ -81,14 +116,10 @@ async def magnet_download(event):
         await event.edit("Error :\n`{}`".format(str(e)))
         return
     gid = download.gid
-    await check_progress_for_dl(gid=gid, event=event, previous=None)
-    file = aria2.get_download(gid)
-    if file.followed_by_ids:
-        new_gid = await check_metadata(gid)
-        await progress_status(gid=new_gid, event=event, previous=None)
+    await check_progress_for_dl(gid, event)
 
 
-@register(outgoing=True, pattern="^.aclear(?: |$)(.*)")
+@register(outgoing=True, pattern="^.aria_clr$")
 async def remove_all(event):
     try:
         removed = aria2.remove_all(force=True)
@@ -97,35 +128,32 @@ async def remove_all(event):
         pass
     if not removed:  # If API returns False Try to Remove Through System Call.
         system("aria2p remove-all")
-    await event.edit("`Clearing on-going downloads... `")
-    await sleep(2.5)
-    await event.edit("`Successfully cleared all downloads.`")
-    await sleep(2.5)
+    await event.edit("`Successfully cleared the download queue.`")
 
 
-@register(outgoing=True, pattern="^.apause(?: |$)(.*)")
+@register(outgoing=True, pattern="^.aria_pause$")
 async def pause_all(event):
     # Pause ALL Currently Running Downloads.
     paused = aria2.pause_all(force=True)
-    await event.edit("`Pausing downloads...`")
-    await sleep(2.5)
-    await event.edit("`Successfully paused on-going downloads.`")
-    await sleep(2.5)
+    await event.edit(f"`Successfully paused on-going downloads.`\
+    \nOutput: {str(paused)}")
 
 
-@register(outgoing=True, pattern="^.aresume(?: |$)(.*)")
+@register(outgoing=True, pattern="^.aria_resume$")
 async def resume_all(event):
     resumed = aria2.resume_all()
-    await event.edit("`Resuming downloads...`")
-    await sleep(1)
-    await event.edit("`Downloads resumed.`")
-    await sleep(2.5)
-    await event.delete()
+    await event.edit(f"`Resumed current download queue on aria2 local server.`\
+    \nOutput: {str(resumed)}")
 
 
-@register(outgoing=True, pattern="^.ashow(?: |$)(.*)")
+@register(outgoing=True, pattern="^.aria_stats$")
 async def show_all(event):
     output = "output.txt"
+    if not aria2:
+        await event.edit(
+            "`No ongoing downloads, coz local aria2 server is not running.`\
+        \n`Spin up a new instance of the aria2 server using .startaria`")
+        return
     downloads = aria2.get_downloads()
     msg = ""
     for download in downloads:
@@ -137,79 +165,65 @@ async def show_all(event):
                             download.eta_string()) + "\n\n"
     if len(msg) <= 4096:
         await event.edit("`On-going Downloads: `\n" + msg)
-        await sleep(5)
+        await asyncio.sleep(5)
         await event.delete()
     else:
-        await event.edit("`Output is too big, sending it as a file...`")
-        with open(output, 'w') as f:
-            f.write(msg)
-        await sleep(2)
-        await event.delete()
+        with io.BytesIO(str.encode(msg)) as out_file:
+            out_file.name = "aria_stats.txt"
         await event.client.send_file(
             event.chat_id,
-            output,
+            out_file,
             force_document=True,
-            supports_streaming=False,
             allow_cache=False,
-            reply_to=event.message.id,
+            caption="`Here's my HUGE download queue.`",
         )
 
 
-async def check_metadata(gid):
+async def check_progress_for_dl(gid, event):
+    previous_message = None
     file = aria2.get_download(gid)
-    new_gid = file.followed_by_ids[0]
-    LOGS.info("Changing GID " + gid + " to" + new_gid)
-    return new_gid
-
-
-async def check_progress_for_dl(gid, event, previous):
-    complete = None
-    while not complete:
+    while not file.is_complete:
         file = aria2.get_download(gid)
-        complete = file.is_complete
         try:
-            if not complete and not file.error_message:
-                msg = f"\nDownloading File: `{file.name}`"
-                msg += f"\nSpeed: {file.download_speed_string()}"
-                msg += f"\nProgress: {file.progress_string()}"
-                msg += f"\nTotal Size: {file.total_length_string()}"
+            if not file.error_message:
+                percentage = file.progress()
+                progress_str = "[{0}{1}] {2}%\n".format(
+                    ''.join(["▰" for i in range(math.floor(percentage / 10))]),
+                    ''.join([
+                        "▱" for i in range(10 - math.floor(percentage / 10))
+                    ]), round(percentage, 2))
+                msg = f"\nName: `{file.name}`"
+                msg += f"\n🔽: {file.download_speed_string()} / 🔼: {file.upload_speed_string()}"
+                msg += f"\n{progress_str}"
+                msg += f"\nSize: {file.total_length_string()}"
                 msg += f"\nStatus: {file.status}"
                 msg += f"\nETA: {file.eta_string()}"
-                if msg != previous:
+                if msg != previous_message:
                     await event.edit(msg)
-                    msg = previous
+                    previous_message = msg
+                    await asyncio.sleep(15)
             else:
-                LOGS.info(str(file.error_message))
+                msg = file.error_message
                 await event.edit(f"`{msg}`")
-            await sleep(5)
-            await check_progress_for_dl(gid, event, previous)
-            file = aria2.get_download(gid)
-            complete = file.is_complete
-            if complete:
-                await event.edit(f"File Downloaded Successfully: `{file.name}`"
-                                 )
-                return False
-        except Exception as e:
-            if " not found" in str(e) or "'file'" in str(e):
-                await event.edit("Download Canceled :\n`{}`".format(file.name))
-                await sleep(2.5)
-                await event.delete()
                 return
-            elif " depth exceeded" in str(e):
-                file.remove(force=True)
-                await event.edit(
-                    "Download Auto Canceled :\n`{}`\nYour Torrent/Link is Dead."
-                    .format(file.name))
+        except Exception as e:
+            LOGS.info(str(e))
+            pass
+    file = aria2.get_download(gid)
+    complete = file.is_complete
+    if complete:
+        await event.edit(f"`Download complete !!`\
+        \nSaved as: `{file.name}`")
 
 
 CMD_HELP.update({
     "aria":
-    ".aurl [URL] (or) .amag [Magnet Link] (or) .ator [path to torrent file]\
+    ".aria_dl [URL] (or) .magnet [Magnet Link] (or) .torrent [path to torrent file]\
     \nUsage: Downloads the file into your userbot server storage.\
-    \n\n.apause (or) .aresume\
+    \n\n.aria_pause (or) .aria_resume\
     \nUsage: Pauses/resumes on-going downloads.\
-    \n\n.aclear\
+    \n\n.aria_clr\
     \nUsage: Clears the download queue, deleting all on-going downloads.\
-    \n\n.ashow\
+    \n\n.aria_stats\
     \nUsage: Shows progress of the on-going downloads."
 })

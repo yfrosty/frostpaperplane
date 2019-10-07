@@ -29,7 +29,7 @@ from userbot.events import register
 # =================== CONSTANT ===================
 PP_TOO_SMOL = "`The image is too small`"
 PP_ERROR = "`Failure while processing the image`"
-NO_ADMIN = "`I am not an admin!`"
+NO_ADMIN = "`I am not an admin of this chat!`"
 NO_PERM = "`I don't have sufficient permissions!`"
 NO_SQL = "`Running on Non-SQL mode!`"
 
@@ -526,24 +526,21 @@ async def gspider(gspdr):
 
 @register(outgoing=True, pattern="^.zombies(?: |$)(.*)", groups_only=True)
 async def rm_deletedacc(show):
-    """ For .delusers command, list all the ghost/deleted accounts in a chat. """
-    if not show.is_group:
-        await show.edit("`I don't think this is a group.`")
-        return
+    """ For .zombies command, list all the ghost/deleted accounts in a chat. """
+
     con = show.pattern_match.group(1).lower()
     del_u = 0
     del_status = "`No deleted accounts found, Group is cleaned as Hell`"
 
     if con != "clean":
         await show.edit("`Searching for zombie accounts...`")
-        async for user in show.client.iter_participants(show.chat_id,
-                                                        aggressive=True):
+        async for user in show.client.iter_participants(show.chat_id):
             if user.deleted:
                 del_u += 1
                 await sleep(1)
         if del_u > 0:
-            del_status = f"Found **{del_u}** deleted account(s) in this group,\
-            \nclean them by using .delusers clean"
+            del_status = f"`Found` **{del_u}** `deleted account(s) in this group,\
+            \nclean them by using .zombies clean`"
 
         await show.edit(del_status)
         return
@@ -862,8 +859,8 @@ CMD_HELP.update({
 \nUsage: Mutes the person in all groups you have in common with them.\
 \n\n.ungmute <username/userid> (or) reply to a message with .ungmute\
 \nUsage: Removes the person from the global mute list.\
-\n\n.delusers\
-\nUsage: Searches for deleted accounts in a group. Use .delusers clean to remove deleted accounts from the group.\
+\n\n.zombies (or) .zombies clean\
+\nUsage: Searches (or) cleans deleted accounts in a group.\
 \n\n.admins\
 \nUsage: Retrieves a list of admins in the chat.\
 \n\n.bots\

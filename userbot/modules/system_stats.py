@@ -30,7 +30,6 @@ async def sysdetails(sysd):
             stdout=asyncPIPE,
             stderr=asyncPIPE,
         )
-
         stdout, stderr = await fetch.communicate()
         result = str(stdout.decode().strip()) \
             + str(stderr.decode().strip())
