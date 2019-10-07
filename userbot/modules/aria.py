@@ -26,7 +26,7 @@ async def aria_kickstart(event):
     LOGS.info(f"Current trackers list: {trackers}")
 
     # Command for starting aria2 local server.
-    aria_start_cmd = f"aria2c \
+    aria_start_shell = f"aria2c \
     --enable-rpc=true \
     --rpc-listen-all=false \
     --rpc-listen-port 6800 \
@@ -42,10 +42,14 @@ async def aria_kickstart(event):
     --bt-tracker={trackers} \
     --dir='{TEMP_DOWNLOAD_DIRECTORY}' \
     --allow-overwrite=true"
+    
+    # Since the command is too long to exec,
+    # let's split it into a list of args.
+    aria_start_cmd = aria_start_shell.split()
 
     try:
         process = await asyncio.create_subprocess_exec(
-            aria_start_cmd.split(),
+            *aria_start_cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE)
         stdout, stderr = await process.communicate()
