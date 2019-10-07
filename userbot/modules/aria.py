@@ -45,7 +45,7 @@ async def aria_kickstart(event):
 
     try:
         process = await asyncio.create_subprocess_exec(
-            aria_start_cmd,
+            aria_start_cmd.split(),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE)
         stdout, stderr = await process.communicate()
