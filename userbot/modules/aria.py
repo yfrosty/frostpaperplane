@@ -16,7 +16,7 @@ aria2 = None
 
 
 @register(outgoing=True, pattern="^.aria_start$")
-async def aria_kickstart():
+async def aria_kickstart(event):
     # Get best trackers for improved download speeds, thanks K-E-N-W-A-Y.
     LOGS.info("Fetching trackers for local aria2 server....")
     trackers_list = get(
